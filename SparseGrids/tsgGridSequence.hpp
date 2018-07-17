@@ -101,6 +101,8 @@ public:
     void evaluateBatchGPUcuda(const double x[], int num_x, double y[], std::ostream *os) const;
     void evaluateBatchGPUmagma(int gpuID, const double x[], int num_x, double y[], std::ostream *os) const;
 
+    void evaluateGradient(const double x[], double y[]) const;
+
     void evaluateHierarchicalFunctions(const double x[], int num_x, double y[]) const;
 
     int* estimateAnisotropicCoefficients(TypeDepth type, int output) const;
@@ -141,6 +143,24 @@ protected:
             }
         }
         return cache;
+    }
+
+    template<typename T>
+    T** cacheBasisDerivatives(const T x[]) const{
+        T **dcache = new T*[num_dimensions];
+        for(int j=0; j<num_dimensions; j++){
+            dcache[j] = new T[max_levels[j] + 1];
+            dcache[j][0] = 0.0;
+            double f = 1.0;
+            for(int i=0; i<max_levels[j]; i++){
+                dcache[j][i+1] = dcache[j][i] * (x[j] - nodes[i]) + f;
+                f *= (x[j] - nodes[i]);
+            }
+            for(int i=1; i<=max_levels[j]; i++){
+                dcache[j][i] /= coeff[i];
+            }
+        }
+        return dcache;
     }
 
     void recomputeSurpluses();

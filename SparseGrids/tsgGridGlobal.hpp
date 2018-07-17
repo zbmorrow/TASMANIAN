@@ -94,6 +94,7 @@ public:
 
     void evaluate(const double x[], double y[]) const;
     void integrate(double q[], double *conformal_correction) const;
+    void evaluateGradient(const double x[], double y[]) const;
 
     void evaluateFastCPUblas(const double x[], double y[]) const;
     void evaluateFastGPUcublas(const double x[], double y[], std::ostream *os) const;

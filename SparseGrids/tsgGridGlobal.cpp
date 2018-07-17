@@ -792,6 +792,51 @@ void GridGlobal::evaluateBatchGPUmagma(int, const double x[], int num_x, double 
 }
 #endif // Tasmanian_ENABLE_MAGMA
 
+void GridGlobal::evaluateGradient(const double x[], double y[]) const{
+    IndexSet *work = (points == 0) ? needed : points;
+    CacheLagrange<double> *lcache = new CacheLagrange<double>(num_dimensions, max_levels, wrapper, x, true);
+    int num_points = work->getNumIndexes();
+    double *weights = new double[num_dimensions * num_points];
+    std::fill(weights, weights + num_points, 0.0);
+
+    int *num_oned_points = new int[num_dimensions];
+    for(int n=0; n<active_tensors->getNumIndexes(); n++){
+        const int* levels = active_tensors->getIndex(n);
+        num_oned_points[0] = wrapper->getNumPoints(levels[0]);
+        int num_tensor_points = num_oned_points[0];
+        for(int j=1; j<num_dimensions; j++){
+            num_oned_points[j] = wrapper->getNumPoints(levels[j]);
+            num_tensor_points *= num_oned_points[j];
+        }
+        double tensor_weight = (double) active_w[n];
+        for(int i=0; i<num_tensor_points; i++){
+            for (int dim=0; dim<num_dimensions; dim++){
+                int t = i;
+                double w = 1.0;
+                for(int j=num_dimensions-1; j>=0; j--){
+                    w *= (j == dim) ? lcache->getLagrangeDerivative(j, levels[j], t % num_oned_points[j]) : lcache->getLagrange(j, levels[j], t % num_oned_points[j]);
+                    t /= num_oned_points[j];
+                }
+                weights[num_dimensions * tensor_refs[n][i] + dim] += tensor_weight * w;
+            }
+        }
+    }
+    delete[] num_oned_points;
+    work = 0;
+
+    TasBLAS::setzero(num_outputs*num_dimensions, y);
+    for(int k=0; k<num_outputs; k++){
+        for(int i=0; i<points->getNumIndexes(); i++){
+            const double *v = values->getValues(i);
+            for(int j=0; j<num_dimensions; j++){
+                y[k * num_dimensions + j] += weights[i * num_dimensions + j] * v[k];
+            }
+        }
+    }
+    delete lcache;
+    delete[] weights;
+}
+
 #if defined(Tasmanian_ENABLE_CUBLAS) || defined(Tasmanian_ENABLE_CUDA) || defined(Tasmanian_ENABLE_MAGMA)
 void GridGlobal::makeCheckAccelerationData(TypeAcceleration acc, std::ostream *os) const{
     if (AccelerationMeta::isAccTypeFullMemoryGPU(acc)){

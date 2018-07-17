@@ -40,15 +40,22 @@ namespace TasGrid{
 template <typename T>
 class CacheLagrange{
 public:
-    CacheLagrange(int num_dimensions, const int max_levels[], const OneDimensionalWrapper *crule, const double x[]) : rule(crule){
-        cache = new T*[num_dimensions];
+    CacheLagrange(int num_dimensions, const int max_levels[], const OneDimensionalWrapper *crule, const double x[], bool compute_derivatives = false) : dcache(0), rule(crule){
         int full_cache = rule->getPointsCount(max_levels[0] + 1);
         for(int j=1; j<num_dimensions; j++){
             full_cache += rule->getPointsCount(max_levels[j]+1);
         }
+        cache = new T*[num_dimensions];
         cache[0] = new T[full_cache];
         for(int j=0; j<num_dimensions-1; j++){
             cache[j+1] = &(cache[j][rule->getPointsCount(max_levels[j]+1)]);
+        }
+        if (compute_derivatives){
+            dcache = new T*[num_dimensions];
+            dcache[0] = new T[full_cache];
+            for(int j=0; j<num_dimensions-1; j++){
+                dcache[j+1] = &(dcache[j][rule->getPointsCount(max_levels[j]+1)]);
+            }
         }
 
         for(int dim=0; dim<num_dimensions; dim++){
@@ -57,16 +64,38 @@ public:
                 const double *coeff = rule->getCoefficients(level);
                 int num_points = rule->getNumPoints(level);
 
-                T *c = &(cache[dim][rule->getPointsCount(level)]);
-                c[0] = 1.0;
-                for(int j=0; j<num_points-1; j++){
-                    c[j+1] = (x[dim] - nodes[j]) * c[j];
-                }
-                T w = (rule->getType() == rule_clenshawcurtis0) ? (x[dim] - 1.0) * (x[dim] + 1.0) : 1.0;
-                c[num_points-1] *= w * coeff[num_points-1];
-                for(int j=num_points-2; j>=0; j--){
-                    w *= (x[dim] - nodes[j+1]);
-                    c[j] *= w * coeff[j];
+                T *c = 0, *g = 0;
+                if (compute_derivatives){
+                    c = &(cache[dim][rule->getPointsCount(level)]);
+                    g = &(dcache[dim][rule->getPointsCount(level)]);
+                    c[0] = 1.0;
+                    g[0] = 0.0;
+                    for(int j=0; j<num_points-1; j++){
+                        g[j+1] = (x[dim] - nodes[j]) * g[j] + c[j];
+                        c[j+1] = (x[dim] - nodes[j]) * c[j];
+                    }
+                    T w = (rule->getType() == rule_clenshawcurtis0) ? (x[dim] - 1.0) * (x[dim] + 1.0) : 1.0;
+                    T w_g = (rule->getType() == rule_clenshawcurtis0) ? 2.0 * x[dim] : 0.0;
+                    g[num_points-1] = coeff[num_points-1] * (g[num_points-1] * w + c[num_points-1] * w_g);
+                    c[num_points-1] *= w * coeff[num_points-1];
+                    for(int j=num_points-2; j>=0; j--){
+                        w_g = w_g * (x[dim] - nodes[j+1]) + w;
+                        w *= (x[dim] - nodes[j+1]);
+                        g[j] = coeff[j] * (g[j] * w + c[j] * w_g);
+                        c[j] *= w * coeff[j];
+                    }
+                }else{
+                    c = &(cache[dim][rule->getPointsCount(level)]);
+                    c[0] = 1.0;
+                    for(int j=0; j<num_points-1; j++){
+                        c[j+1] = (x[dim] - nodes[j]) * c[j];
+                    }
+                    T w = (rule->getType() == rule_clenshawcurtis0) ? (x[dim] - 1.0) * (x[dim] + 1.0) : 1.0;
+                    c[num_points-1] *= w * coeff[num_points-1];
+                    for(int j=num_points-2; j>=0; j--){
+                        w *= (x[dim] - nodes[j+1]);
+                        c[j] *= w * coeff[j];
+                    }
                 }
             }
         }
@@ -76,6 +105,10 @@ public:
             delete[] cache[0];
             delete[] cache;
         }
+        if (dcache != 0){
+            delete[] dcache[0];
+            delete[] dcache;
+        }
         rule = 0;
     }
 
@@ -83,8 +116,13 @@ public:
         return cache[dimension][rule->getPointsCount(level) + local];
     }
 
+    T getLagrangeDerivative(int dimension, int level, int local) const{
+        return dcache[dimension][rule->getPointsCount(level) + local];
+    }
+
 private:
     T **cache;
+    T **dcache;
     const OneDimensionalWrapper *rule;
 };
 

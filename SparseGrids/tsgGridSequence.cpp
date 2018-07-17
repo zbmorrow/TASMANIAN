@@ -596,6 +596,36 @@ void GridSequence::evaluateBatchGPUcuda(const double x[], int num_x, double y[],
 void GridSequence::evaluateBatchGPUmagma(int, const double x[], int num_x, double y[], std::ostream *os) const{
     evaluateBatchGPUcublas(x, num_x, y, os);
 }
+
+void GridSequence::evaluateGradient(const double x[], double y[]) const{
+    double **cache = cacheBasisValues<double>(x);
+    double **dcache = cacheBasisDerivatives<double>(x);
+
+    std::fill(y, y + num_dimensions * num_outputs, 0.0);
+
+    int n = points->getNumIndexes();
+    for(int i=0; i<n; i++){
+        const int* p = points->getIndex(i);
+        double *basis_value = new double[num_dimensions];
+        std::fill(basis_value, basis_value + num_dimensions, 1.0);
+        for (int dim=0; dim<num_dimensions; dim++){
+            for(int j=0; j<num_dimensions; j++){
+                basis_value[dim] *= (j == dim ? dcache[j][p[j]] : cache[j][p[j]]);
+            }
+        }
+
+        const double *surp = &(surpluses[((size_t) i) * ((size_t) num_outputs)]);
+        for(int k=0; k<num_outputs; k++){
+            for (int j=0; j<num_dimensions; j++){
+                y[k * num_dimensions + j] += basis_value[j] * surp[k];
+            }
+        }
+    }
+
+    for(int j=0; j<num_dimensions; j++) { delete[] cache[j]; delete dcache[j]; }
+    delete[] cache; delete[] dcache;
+}
+
 #if defined(Tasmanian_ENABLE_CUBLAS) || defined(Tasmanian_ENABLE_CUDA)
 void GridSequence::makeCheckAccelerationData(TypeAcceleration acc, std::ostream *os) const{
     if (AccelerationMeta::isAccTypeFullMemoryGPU(acc)){
