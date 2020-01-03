@@ -705,7 +705,19 @@ void GridFourier::clearAccelerationData(){
 }
 
 void GridFourier::estimateAnisotropicCoefficients(TypeDepth type, int output, std::vector<int> &weights) const{
-    double tol = 1000.0 * Maths::num_tol;
+    // Use tol as larger of 1000*Maths::num_tol or 1/N^2 (N = largest tensor size).
+    // This is a pessimistic error estimate of FFT approximating the continuous
+    // Fourier transform, only assumes f(x) itself is periodic.
+
+    int largest_active_tensor_size = 0;
+    for(int n=0; n<active_tensors.getNumIndexes(); n++){
+        const int *levels = active_tensors.getIndex(n);
+        int current_tensor_size = 1;
+        for(int j=0; j<num_dimensions; j++) current_tensor_size *= wrapper.getNumPoints(levels[j]);
+        if(current_tensor_size > largest_active_tensor_size) largest_active_tensor_size = current_tensor_size;
+    }
+    double tol = std::max(1000.0 * Maths::num_tol, 1.0 / ((double) largest_active_tensor_size * largest_active_tensor_size));
+
     int num_points = points.getNumIndexes();
     std::vector<double> max_fcoef(num_points);
 

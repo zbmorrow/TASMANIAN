@@ -1367,8 +1367,8 @@ bool ExternalTester::testAllRefinement() const{
         const BaseFunction *f = &f21c1c2periodic;
         grid.makeFourierGrid(f->getNumInputs(), f->getNumOutputs(), 3, type_hyperbolic);
         grid.setDomainTransform({-1.0, -1.0}, {1.0, 1.0});
-        int np[5] = { 17, 35, 111, 273, 759 };
-        double errs[5] = { 1.28e-2, 2.80e-3, 1.97e-4, 6.78e-5, 5.65e-5 };
+        int np[5] = { 17, 35, 53, 111, 273 };
+        double errs[5] = { 1.28e-2, 8.07e-3, 9.4e-4, 9.2e-5, 4.1e-5 };
         if (!testAnisotropicRefinement(f, grid, type_hyperbolic, 1, np, errs, 5)){
             cout << "ERROR: failed anisotropic refinement using Fourier hyperbolic nodes for " << f->getDescription() << endl;  pass2 = false;
         }
